@@ -1,4 +1,4 @@
-## group-by
+### group-by
 
 ##### An XQuery library for computing aggregates over tuples in MarkLogic Server
 
@@ -284,11 +284,28 @@ The `$options` parameter is passed to [cts:aggregate](http://docs.marklogic.com/
 
 *FIXME*
 
+### <a name="additional"/> Additional Modules
+
+##### group-by-config
+
+This module provides functions for discovering indices, and grouping them by root document QNames. This allows for zero-knowledge, dynamic generation of **group-by** queries. Additionally, this module generates and processes serialized **group-by** query definitions.
+
+_**Warning: this is experimental software!** This module uses un-supported features of MarkLogic Server, which are subject to modification or removal without notice._
+
+##### cts-extensions
+
+This modules contains experimental new query types which are used by **group-by-config**, specifically `ctx:root-element-query`.
+
+_**Warning: this is experimental software!** This module uses un-supported features of MarkLogic Server, which are subject to modification or removal without notice._
+
 ### License Information
 
-Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
+###### group-by
+- Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
+- Copyright (c) 2014 Gary Vidal. All Rights Reserved.
 
-Copyright (c) 2014 Gary Vidal. All Rights Reserved.
+###### additional modules
+- Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
