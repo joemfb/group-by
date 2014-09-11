@@ -94,6 +94,7 @@ declare private function ctx:element-attribute-query-term($qname as xs:QName, $a
   return fn:exactly-one($plan//qry:term-query[fn:starts-with(qry:annotation, "element-attribute(")]/qry:key)/fn:data(.)
 };
 
+(: requires further testing; doesn't seem to work in some cases :)
 declare function ctx:element-attribute-query($qname as xs:QName, $attr as xs:QName)
 { ctx:element-attribute-query($qname, $attr, ()) };
 
@@ -112,6 +113,18 @@ declare function ctx:path-query($path-expression as xs:string)
     cts:index-path-keys($path-expression)/idxpath:reindexer-keys/* ! cts:term-query(., 0))
 };
 
+declare function ctx:db-path-namespaces() as xs:string*
+{ ctx:db-path-namespaces(xdmp:database()) };
+
+declare function ctx:db-path-namespaces($database-id as xs:unsignedLong) as xs:string*
+{
+  for $ns in xdmp:database-path-namespaces($database-id)/db:path-namespace
+  return (
+    $ns/db:prefix/fn:string(),
+    $ns/db:namespace-uri/fn:string()
+  )
+};
+
 declare function ctx:resolve-reference-from-index($node) as cts:reference*
 {
   let $options :=
@@ -120,7 +133,7 @@ declare function ctx:resolve-reference-from-index($node) as cts:reference*
     if (fn:not($node/db:scalar-type = ("date", "int", "decimal")))
     then
       $node/db:collation ! fn:concat("collation=", .)
-    else (),
+    else ()
     (:
       TODO:
       $node/db:coordinate-system ! fn:concat("coordinate-system", .)
@@ -138,6 +151,7 @@ declare function ctx:resolve-reference-from-index($node) as cts:reference*
         )
       case element(db:range-element-attribute-index) return
         cts:element-attribute-reference(
+          (: TODO: tokenize names? :)
           for $elem in $node/db:parent-localname
           return fn:QName($node/db:parent-namespace-uri, $elem),
           for $attr in $node/db:localname
@@ -145,7 +159,9 @@ declare function ctx:resolve-reference-from-index($node) as cts:reference*
           $options
         )
       case element(db:range-path-index) return
-        cts:path-reference($node/db:path-expression, $options)
+        xdmp:with-namespaces(
+          ctx:db-path-namespaces(),
+          cts:path-reference($node/db:path-expression, $options))
       (: TODO: process other reference types :)
       case element(cts:field-reference) return ()
       case element(cts:uri-reference) return ()
