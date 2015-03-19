@@ -4,6 +4,12 @@
 
 *requires MarkLogic Server v7 or greater*
 
+available through [mlpm](http://registry.demo.marklogic.com/package/group-by):
+
+    mlpm install group-by
+
+*depends on [https://github.com/joemfb/cts-extensions](https://github.com/joemfb/cts-extensions)*
+
 [MarkLogic Server](http://developer.marklogic.com/) provides a huge API surface for all kinds of queries, but selecting tabular result-sets and computing additional columns (i.e., performing SQL-style queries in XQuery) tends to create highly-coupled and overly complicated code.
 
 <small>**simple example**: select the *average salary* and *median bonus* for each *position* at each *company* in a set of personnel records of the following structure:</small>
@@ -284,19 +290,22 @@ The `$options` parameter is passed to [cts:aggregate](http://docs.marklogic.com/
 
 *FIXME*
 
-### <a name="additional"/> Additional Modules
+#### additional modules
 
-##### group-by-config
+##### group-by-json (`http://marklogic.com/cts/group-by/json`)
 
-This module provides functions for discovering indices, and grouping them by root document QNames. This allows for zero-knowledge, dynamic generation of **group-by** queries. Additionally, this module generates and processes serialized **group-by** query definitions.
+*Warning: this implementation is unstable and likely to change*.
 
-_**Warning: this is experimental software!** This module uses un-supported features of MarkLogic Server, which are subject to modification or removal without notice._
+##### <a name="func_grpj_query_1"/> grpj:query\#1
+```xquery
+grpj:query($query)
+```
 
-##### cts-extensions
+ evaluate map / JSON serialized `cts:group-by` query definitions
 
-This modules contains experimental new query types which are used by **group-by-config**, specifically `ctx:root-element-query`.
+###### params
 
-_**Warning: this is experimental software!** This module uses un-supported features of MarkLogic Server, which are subject to modification or removal without notice._
+* $query as `map:map` or `json:object`
 
 ### License Information
 
@@ -304,7 +313,7 @@ _**Warning: this is experimental software!** This module uses un-supported featu
 - Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
 - Copyright (c) 2014 Gary Vidal. All Rights Reserved.
 
-###### additional modules
+###### group-by-json
 - Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");

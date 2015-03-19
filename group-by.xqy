@@ -3,20 +3,21 @@ xquery version "1.0-ml";
 (:~
  : provides declarative syntax for grouping lexicon values and performing constrained aggregate computations
  :
+ : depends on https://github.com/joemfb/cts-extensions
+ :
  : @author Gary Vidal
  : @author Joe Bryan
  : @version 0.9
  :)
 module namespace ext = "http://marklogic.com/cts";
 
-declare default collation "http://marklogic.com/collation/";
+import module namespace ctx = "http://marklogic.com/cts-extensions"
+  at "/mlpm_modules/cts-extensions/cts-extensions.xqy";
 
 declare option xdmp:mapping "false";
 
-declare variable $cts:NUMERIC_TYPES := ("int", "unsignedInt", "long", "unsignedLong", "float", "double", "decimal");
 declare variable $cts:AGGREGATES :=
   map:new((
-    map:entry("sum", cts:sum-aggregate(?, ?, ?)),
     map:entry("sum", cts:sum-aggregate(?, ?, ?)),
     map:entry("avg", cts:avg-aggregate(?, ?, ?)),
     map:entry("min", cts:min(?, ?, ?)),
@@ -47,68 +48,9 @@ declare variable $cts:AGGREGATES :=
     })));
 
 (:~
- : Create a range query from a cts:reference and values
- :
- : @param $node a cts:reference, or the XML representation thereof
- : @param $values the values to which the query will be constrained
- : @return cts:query
- :)
-declare function cts:reference-query($node,$values as xs:anyAtomicType*) as cts:query {
-  let $node := if($node instance of element()) then $node else <x>{$node}</x>/*
-  let $ref :=  $node
-  let $options :=
-  (
-    $ref/cts:scalar-type ! fn:concat("type=", .),
-    $ref/cts:collation ! fn:concat("collation=", .),
-    $ref/cts:coordinate-system ! fn:concat("coordinate-system", .)
-  )
-  return
-    typeswitch($ref)
-      case element(cts:element-reference) return
-        cts:element-range-query(
-          for $elem in $ref/cts:localname
-          return fn:QName($ref/cts:namespace-uri,$elem),
-          "=", $values,
-          $options[fn:not(fn:starts-with(., "type"))]
-        )
-      case element(cts:element-attribute-reference) return
-        cts:element-attribute-range-query(
-          for $elem in $ref/cts:parent-localname
-          return fn:QName($ref/cts:parent-namespace-uri,$elem),
-          for $attr in $ref/cts:localname
-          return fn:QName($ref/cts:namespace-uri,$attr),
-          "=", $values,
-          $options
-        )
-      case element(cts:path-reference) return
-        cts:path-range-query(
-          $ref/cts:path-expression,
-          "=", $values,
-          $options[fn:not(fn:starts-with(., "type"))]
-        )
-      case element(cts:field-reference) return
-        cts:field-range-query(
-          $ref/cts:name,
-          "=", $values,
-          $options
-        )
-      case element(cts:uri-reference) return
-        cts:document-query($values)
-      case element(cts:collection-reference) return
-        cts:collection-query($values)
-      case element(cts:geospatial-attribute-pair-reference) return ()
-      case element(cts:geospatial-element-pair-reference) return ()
-      case element(cts:geospatial-element-child-reference) return ()
-      case element(cts:geospatial-element-reference) return ()
-      default return fn:error(xs:QName("REFERENCE-QUERY-ERROR"),"Unknown Reference Type to create query",$ref)
-};
-
-(:~
  : Create a sequence of range queries, one for each cts:reference and value
  :
- : @param $refs a sequence of cts:reference's, or the XML representation thereof
- : @param $values the values to which the queries will be constrained
- : @return cts:query+
+ : @param $ref as `cts:reference*` or `element(cts:*-reference)*`
  :)
 declare function cts:reference-queries($refs, $values as xs:anyAtomicType*) as cts:query+
 {
@@ -117,14 +59,13 @@ declare function cts:reference-queries($refs, $values as xs:anyAtomicType*) as c
     then json:array-size($values)
     else fn:count($values)
   for $i in 1 to $size
-  return cts:reference-query($refs[$i], $values[$i])
+  return ctx:reference-query($refs[$i], $values[$i])
 };
 
 (:~
- : Get the cts:reference(s) from the XML representation of a cts:column, cts:compute, or cts:row
+ : Get 1-or-more `cts:reference` objects from `$ref-parent`
  :
- : @param $ref-parent the XML representation of a cts:column, cts:compute, or cts:row
- : @return cts:reference*
+ : @param $ref-parent as `element(cts:column)`, `element(cts:compute), or `element(cts:row)`
  :)
 declare function cts:get-reference($ref-parent) as cts:reference*
 {
