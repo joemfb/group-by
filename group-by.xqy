@@ -192,16 +192,30 @@ declare function cts:cube(
   cts:olap-complete( cts:olap-def(xs:QName("cts:cube"), $f, $options, $query)() )
 };
 
-declare %private function cts:olap-complete($def as element(cts:olap))
+declare %private function cts:to-nested-array($seq) as json:array
 {
-  if ($def/cts:options/cts:headers eq "true")
-  then
-    map:new((
-      map:entry("headers", cts:olap-headers($def)),
-      map:entry("results", cts:olap($def))))
-  else cts:olap($def)
+  json:array(
+    document {
+      json:to-array(
+        document { $seq }/* ) }/*)
 };
 
+declare %private function cts:olap-complete($def as element(cts:olap))
+{
+  let $wrap :=
+    if (xs:boolean($def/cts:options/cts:headers))
+    then function($x) {
+      map:new((
+        map:entry("headers", cts:olap-headers($def)),
+        map:entry("results", $x)))
+    }
+    else function($x) { $x }
+  return
+    $wrap(
+      if ($def/cts:options/cts:format eq "array")
+      then cts:to-nested-array(cts:olap($def))
+      else cts:olap($def))
+};
 
 declare %private function cts:olap-headers($def as element(cts:olap))
 {
@@ -269,12 +283,12 @@ declare %private function cts:olap-output($format as xs:string) as item()
 };
 
 (: returns a consistent interface to `map:put` or `json:array-push()` :)
-declare %private function cts:olap-format($format as xs:string, $output) as function(*)
+declare %private function cts:olap-format($output) as function(*)
 {
-  switch($format)
-    case "map" return map:put($output, ?, ?)
-    case "array" return function($k, $v) { json:array-push($output, $v) }
-    default return fn:error(xs:QName("UNKNOWN-FORMAT"), $format)
+  typeswitch($output)
+    case map:map return map:put($output, ?, ?)
+    case json:array return function($k, $v) { json:array-push($output, $v) }
+    default return fn:error(xs:QName("UNKNOWN-OUTPUT-TYPE"), xdmp:describe($output))
 };
 
 declare function cts:olap($olap as element(cts:olap))
@@ -287,7 +301,8 @@ declare function cts:olap($olap as element(cts:olap), $options as element(cts:op
   let $query := cts:and-query(($q, $olap/cts:query/* ! cts:query(.)))
   (: TODO: union :)
   let $options := ($options, $olap/cts:options)[1]
-  (: TODO: json:to-array(), alternate format-fn ? :)
+
+  (: TODO: cts:to-nested-array(), alternate format-fn ? :)
   let $format := $olap/cts:options/cts:format/fn:string()
 
   for $def in $olap/(cts:group-by|cts:cross-product|cts:cube)
@@ -315,7 +330,7 @@ declare %private function cts:olap-impl(
   let $compute-query := cts:and-query(($query, cts:reference-queries($refs, $tuple)))
   let $output := cts:olap-output($format)
 
-  let $format-fn := cts:olap-format($format, $output)
+  let $format-fn := cts:olap-format($output)
   let $compute-fn :=
     function() {
       for $comp in $computes
@@ -332,8 +347,8 @@ declare %private function cts:olap-impl(
     }
 
   return (
-    for $val at $i in json:array-values($tuple)
-    return $format-fn($members[$i]/cts:alias/fn:string(), $val)
+    for $i in 1 to json:array-size($tuple)
+    return $format-fn($members[$i]/cts:alias/fn:string(), $tuple[$i])
     ,
     switch($type)
       case xs:QName("cts:group-by") return (
