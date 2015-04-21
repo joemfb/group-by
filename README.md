@@ -55,8 +55,8 @@ In contrast, the **group-by** library drastically simplifies these types of oper
 
 ```xquery
 cts:group-by((
-  cts:column("position", cts:element-reference(xs:QName("position"))),
-  cts:column("company", cts:element-reference(xs:QName("company"))),
+  cts:column(cts:element-reference(xs:QName("position"))),
+  cts:column(cts:element-reference(xs:QName("company"))),
   cts:compute("avg", cts:element-reference(xs:QName("salary"))),
   cts:compute("median", cts:element-reference(xs:QName("bonus")))
 ))
@@ -179,7 +179,7 @@ cts:cube(
 
 ### query specification
 
-Query specifications are created from three function types: `cts:row`, `cts:column`, and `cts:compute`. Each type constructs a named `cts:reference` to a lexicon.
+Query specifications are created from three function types: `cts:column`, `cts:row`, and `cts:compute`. Each type constructs a named `cts:reference` to a lexicon.
 
 #### <a name="references"/> lexicon reference types
 
@@ -195,26 +195,40 @@ Query specifications are created from three function types: `cts:row`, `cts:colu
 - [cts:path-reference](http://docs.marklogic.com/cts:path-reference)
 - [cts:uri-reference](http://docs.marklogic.com/cts:uri-reference)
 
-
-#### <a name="func_row"/> cts:row
+#### <a name="func_column"/> cts:column\#1
 ```xquery
-cts:row(
-  $alias as xs:string,
-  $reference as cts:reference,
-) as (function() as element(cts:row))
+cts:column(
+  $reference as cts:reference
+) as (function() as element(cts:column))
 ```
 
-#### <a name="func_column"/> cts:column
+#### <a name="func_column_2"/>
 ```xquery
 cts:column(
   $alias as xs:string,
-  $reference as cts:reference,
+  $reference as cts:reference
 ) as (function() as element(cts:column))
+```
+
+#### <a name="func_row_1"/> cts:row\#1
+```xquery
+cts:row(
+  $reference as cts:reference
+) as (function() as element(cts:row))
+```
+
+#### <a name="func_row_2"/> cts:row\#2
+```xquery
+cts:row(
+  $alias as xs:string,
+  $reference as cts:reference
+) as (function() as element(cts:row))
 ```
 
 ###### notes
 
 - the names "rows" and "columns" are understood in the spirit of spreadsheet pivot tables
+- for `cts:column#1` and `cts:row#1`, a default alias is created from the properties of the `cts:reference` (such as the element name, or path expression)
 - they are treated identically by `cts:group-by`; the distinction between them determines the nesting of result-sets in `cts:cross-product` and `cts:cube`
 
 #### <a name="func_compute"/> cts:compute
@@ -245,7 +259,7 @@ cts:compute(
 
 ###### `$alias`
 
-When `$alias` is not provided, the computation result is aliased to the name of the aggregate function. This can lead to property/key name-collisions when returning results with the option `"format=map"`.
+for `cts:compute#2`, a default alias is constructed: the function name is concatenated with the alias created from the `cts:reference` properties; ex: `avg-<element-name>`
 
 ###### `$function`
 

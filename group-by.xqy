@@ -112,6 +112,11 @@ declare %private function cts:member(
 (:~
  : Create a column reference
  :)
+declare function cts:column($reference as cts:reference)
+{
+  cts:column(ctx:reference-alias($reference), $reference, ())
+};
+
 declare function cts:column($alias as xs:string, $reference as cts:reference)
 {
   cts:column($alias, $reference, ())
@@ -124,6 +129,11 @@ declare function cts:column(
 ) as (function() as element(cts:column))
 {
   cts:member(xs:QName("cts:column"), $alias, $reference, $options)
+};
+
+declare function cts:row($reference as cts:reference)
+{
+  cts:row(ctx:reference-alias($reference), $reference, ())
 };
 
 declare function cts:row($alias as xs:string, $reference as cts:reference)
@@ -142,7 +152,11 @@ declare function cts:row(
 
 declare function cts:compute($function as xs:string, $reference as cts:reference*)
 {
-   cts:compute($function, $function, $reference, ())
+  let $alias := $function ||
+    (if (fn:exists($reference))
+    then "-" || ctx:reference-alias($reference)
+    else ())
+  return cts:compute($alias, $function, $reference)
 };
 
 declare function cts:compute(
@@ -150,7 +164,7 @@ declare function cts:compute(
   $function as xs:string,
   $reference as cts:reference*
 ) {
-   cts:compute($alias, $function, $reference, ())
+  cts:compute($alias, $function, $reference, "concurrent")
 };
 
 declare function cts:compute(
@@ -162,7 +176,6 @@ declare function cts:compute(
 {
   cts:member(xs:QName("cts:compute"), $alias, $reference, $options, element cts:function { $function })
 };
-
 
 declare function cts:group-by($f as function(*)*)
 { cts:group-by($f, (), ()) };
