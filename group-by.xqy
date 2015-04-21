@@ -52,7 +52,7 @@ declare variable $cts:AGGREGATES :=
  :
  : @param $ref as `cts:reference*` or `element(cts:*-reference)*`
  :)
-declare function cts:reference-queries($refs, $values as xs:anyAtomicType*) as cts:query+
+declare %private function cts:reference-queries($refs, $values as xs:anyAtomicType*) as cts:query+
 {
   let $size :=
     if ($values instance of json:array)
@@ -67,24 +67,24 @@ declare function cts:reference-queries($refs, $values as xs:anyAtomicType*) as c
  :
  : @param $ref-parent as `element(cts:column)`, `element(cts:compute), or `element(cts:row)`
  :)
-declare function cts:get-reference($ref-parent) as cts:reference*
+declare %private function cts:get-reference($ref-parent) as cts:reference*
 {
   $ref-parent/cts:*[fn:matches(fn:local-name(.), "reference$")] ! cts:reference-parse(.)
 };
 
-declare function cts:member(
+declare %private function cts:member(
   $type as xs:QName,
-  $alias as xs:string?,
-  $reference as cts:reference?,
+  $alias as xs:string,
+  $reference as cts:reference*,
   $options as xs:string*
 ) {
   cts:member($type, $alias, $reference, $options, ())
 };
 
-declare function cts:member(
+declare %private function cts:member(
   $type as xs:QName,
-  $alias as xs:string?,
-  $reference as cts:reference?,
+  $alias as xs:string,
+  $reference as cts:reference*,
   $options as xs:string*,
   $custom as element()*
 ) {
@@ -103,12 +103,12 @@ declare function cts:member(
  :)
 declare function cts:column($alias as xs:string, $reference as cts:reference)
 {
-  cts:column($alias,$reference,())
+  cts:column($alias, $reference, ())
 };
 
 declare function cts:column(
-   $alias as xs:string?,
-   $reference as cts:reference?,
+   $alias as xs:string,
+   $reference as cts:reference,
    $options as xs:string*
 ) as (function() as element(cts:column))
 {
@@ -121,8 +121,8 @@ declare function cts:row($alias as xs:string, $reference as cts:reference)
 };
 
 declare function cts:row(
-  $alias as xs:string?,
-  $reference as cts:reference?,
+  $alias as xs:string,
+  $reference as cts:reference,
   $options as xs:string*
 ) as (function() as element(cts:row))
 {
@@ -192,7 +192,7 @@ declare function cts:cube(
   cts:olap-complete( cts:olap-def(xs:QName("cts:cube"), $f, $options, $query)() )
 };
 
-declare function cts:olap-complete($def as element(cts:olap))
+declare %private function cts:olap-complete($def as element(cts:olap))
 {
   if ($def/cts:options/cts:headers eq "true")
   then
@@ -203,7 +203,7 @@ declare function cts:olap-complete($def as element(cts:olap))
 };
 
 
-declare function cts:olap-headers($def as element(cts:olap))
+declare %private function cts:olap-headers($def as element(cts:olap))
 {
   let $arr := json:array()
   let $type := $def/(cts:group-by|cts:cross-product|cts:cube)
@@ -221,7 +221,7 @@ declare function cts:olap-headers($def as element(cts:olap))
   )
 };
 
-declare function cts:olap-parse-options($options as xs:string*) as element(cts:options)
+declare %private function cts:olap-parse-options($options as xs:string*) as element(cts:options)
 {
   let $f := function($key as xs:string, $options as xs:string*, $default as xs:string) {
     (fn:tokenize($options[fn:starts-with(., $key)], "=")[2], $default)[1]
@@ -245,7 +245,7 @@ declare function cts:olap-def(
   function() {
     element cts:olap {
       element { $type } {
-        let $defs := element tmp { $f ! .() }
+        let $defs := document { $f ! .() }
         return (
           $defs/cts:row,
           $defs/cts:column,
@@ -259,20 +259,22 @@ declare function cts:olap-def(
   }
 };
 
-declare function cts:olap-output($format as xs:string) as item()
+(: returns an instance of the `$format` type :)
+declare %private function cts:olap-output($format as xs:string) as item()
 {
   switch($format)
     case "map" return map:map()
     case "array" return json:array()
-    default return fn:error(xs:QName("UNKOWN-FORMAT"), $format)
+    default return fn:error(xs:QName("UNKNOWN-FORMAT"), $format)
 };
 
-declare function cts:olap-format($format as xs:string, $output) as function(*)
+(: returns a consistent interface to `map:put` or `json:array-push()` :)
+declare %private function cts:olap-format($format as xs:string, $output) as function(*)
 {
   switch($format)
     case "map" return map:put($output, ?, ?)
     case "array" return function($k, $v) { json:array-push($output, $v) }
-    default return fn:error(xs:QName("UNKOWN-FORMAT"), $format)
+    default return fn:error(xs:QName("UNKNOWN-FORMAT"), $format)
 };
 
 declare function cts:olap($olap as element(cts:olap))
@@ -297,7 +299,7 @@ declare function cts:olap($olap as element(cts:olap), $options as element(cts:op
   return cts:olap-impl(fn:node-name($def), $members, $def/cts:compute, $options, $query)
 };
 
-declare function cts:olap-impl(
+declare %private function cts:olap-impl(
   $type as xs:QName,
   $members as element()+,
   $computes as element()*,
@@ -373,9 +375,9 @@ declare function cts:compute-aggregate($comp as element(cts:compute), $compute-q
     else $aggregate( $comp/cts:get-reference(.), $comp/cts:options/cts:option/fn:string(), $compute-query )
 };
 
-declare function cts:native-aggregate($function as xs:string) as function(*)
+declare %private function cts:native-aggregate($function as xs:string) as function(*)
 {
-  let $groups := fn:analyze-string($function, "^native/(.*)/(.*)$")//*:group
+  let $groups := fn:analyze-string($function, "^native/(.*)/(.*)$")//fn:group
   let $plugin := "native/" || $groups[1]/fn:string()
   let $name := $groups[2]/fn:string()
   return
