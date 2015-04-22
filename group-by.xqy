@@ -27,25 +27,31 @@ declare variable $cts:AGGREGATES :=
     map:entry("variance", cts:variance(?, ?, ?)),
     map:entry("variance-population", cts:variance-p(?, ?, ?)),
     map:entry("count", function($refs, $options, $query) {
-      (: TODO: assert one ref :)
+      cts:assert-count($refs, 1, "cts:count-aggregate requires one reference"),
       cts:count-aggregate($refs, ("fragment-frequency", $options), $query)
     }),
     map:entry("median", function($refs, $options, $query) {
-      (: TODO: assert one ref :)
+      cts:assert-count($refs, 1, "median requires one reference"),
       cts:median( cts:values($refs, (), $options, $query) )
     }),
     map:entry("covariance", function($refs, $options, $query) {
-      (: TODO: assert two refs :)
+      cts:assert-count($refs, 2, "cts:covariance requires two references"),
       cts:covariance($refs[1], $refs[2], $options, $query)
     }),
     map:entry("covariance-population", function($refs, $options, $query) {
-      (: TODO: assert two refs :)
+      cts:assert-count($refs, 2, "cts:covariance-p requires two references"),
       cts:covariance-p($refs[1], $refs[2], $options, $query)
     }),
     map:entry("correlation", function($refs, $options, $query) {
-      (: TODO: assert two refs :)
+      cts:assert-count($refs, 2, "cts:correlation requires two references"),
       cts:correlation($refs[1], $refs[2], $options, $query)
     })));
+
+declare %private function cts:assert-count($items, $count, $msg)
+{
+  if (fn:count($items) eq $count) then ()
+  else fn:error((), "INCORRECT-COUNT", $msg)
+};
 
 (:~
  : Create a sequence of range queries, one for each cts:reference and value
