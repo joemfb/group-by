@@ -28,7 +28,12 @@ declare variable $cts:AGGREGATES :=
     map:entry("variance-population", cts:variance-p(?, ?, ?)),
     map:entry("count", function($refs, $options, $query) {
       cts:assert-count($refs, 1, "cts:count-aggregate requires one reference"),
-      cts:count-aggregate($refs, ("fragment-frequency", $options), $query)
+      cts:count-aggregate(
+        $refs,
+        ($options,
+        if ($options = ("item-frequency", "fragment-frequency")) then ()
+        else "item-frequency"),
+        $query)
     }),
     map:entry("median", function($refs, $options, $query) {
       cts:assert-count($refs, 1, "median requires one reference"),
