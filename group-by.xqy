@@ -78,9 +78,25 @@ declare %private function cts:reference-queries($refs, $values as xs:anyAtomicTy
  :
  : @param $ref-parent as `element(cts:column)`, `element(cts:compute), or `element(cts:row)`
  :)
-declare %private function cts:get-reference($ref-parent) as cts:reference*
+declare %private function cts:get-reference($ref-parent as element()) as cts:reference+
 {
-  $ref-parent/cts:*[fn:matches(fn:local-name(.), "reference$")] ! cts:reference-parse(.)
+  $ref-parent/(
+    cts:uri-reference|
+    cts:collection-reference|
+    cts:element-reference|
+    cts:json-property-reference|
+    cts:element-attribute-reference|
+    cts:path-reference|
+    cts:field-reference|
+    cts:geospatial-attribute-pair-reference|
+    cts:geospatial-element-pair-reference|
+    cts:geospatial-json-property-pair-reference|
+    cts:geospatial-element-child-reference|
+    cts:geospatial-json-property-child-reference|
+    cts:geospatial-element-reference|
+    cts:geospatial-json-property-reference|
+    cts:geospatial-path-reference
+  )/cts:reference-parse(.)
 };
 
 declare %private function cts:member(
