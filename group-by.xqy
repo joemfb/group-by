@@ -52,6 +52,11 @@ declare variable $cts:AGGREGATES :=
       cts:correlation($refs[1], $refs[2], $options, $query)
     })));
 
+declare variable $cts:olap-default-custom-options := map:new((
+  map:entry("format", "array"),
+  map:entry("headers", "false")
+));
+
 declare %private function cts:assert-count($items, $count, $msg)
 {
   if (fn:count($items) eq $count) then ()
@@ -275,18 +280,97 @@ declare %private function cts:olap-headers($def as element(cts:olap))
   )
 };
 
-declare %private function cts:olap-parse-options($options as xs:string*) as element(cts:options)
+declare %private function cts:olap-custom-options($options as xs:string*) as element()+
 {
-  let $f := function($key as xs:string, $options as xs:string*, $default as xs:string) {
-    (fn:tokenize($options[fn:starts-with(., $key)], "=")[2], $default)[1]
-  }
+  for $key in map:keys($cts:olap-default-custom-options)
   return
-    element cts:options {
-      element cts:format { $f("format", $options, "array") },
-      element cts:headers { $f("headers", $options, "false") },
-      for $opt in $options[fn:not(fn:matches(., "^(headers|format)"))]
-      return element cts:option { $opt }
+    element { "cts:" || $key } {
+      fn:head((
+        fn:tokenize($options[fn:starts-with(., $key)], "=")[2],
+        map:get($cts:olap-default-custom-options, $key) ))
     }
+};
+
+declare %private function cts:olap-option-type($option as xs:string) as xs:string?
+{
+  switch($option)
+  case "frequency-order" return "order"
+  case "item-order" return "order"
+  case "fragment-frequency" return "frequency"
+  case "item-frequency" return "frequency"
+  case "ascending" return "direction"
+  case "descending" return "direction"
+  case "eager" return "lazy"
+  case "lazy" return "lazy"
+  case "score-logtfidf" return "score"
+  case "score-logtf" return "score"
+  case "score-simple" return "score"
+  case "score-random" return "score"
+  case "score-zero"  return "score"
+  case "any" return "scope"
+  case "document" return "scope"
+  case "properties" return "scope"
+  case "locks" return "scope"
+  default return ()
+};
+
+declare function cts:olap-parse-options($options as xs:string*) as element()+
+{
+  element cts:options {
+    cts:olap-custom-options($options),
+    for $option in $options
+    let $tokens := fn:tokenize($option, "=")
+    where
+      (: exclude custom options :)
+      if (fn:contains($option, "="))
+      then fn:not(map:contains($cts:olap-default-custom-options, $tokens[1]))
+      else fn:true()
+    return
+      element cts:option {
+        if (fn:contains($option, "="))
+        then (
+          attribute key { $tokens[1] },
+          attribute value { $tokens[2] }
+        )
+        else attribute type { cts:olap-option-type($option) }[. ne ""]
+        ,
+        $option
+      }
+  }
+};
+
+declare function cts:olap-merge-options(
+  $a as element(cts:options)?,
+  $b as element(cts:options)?
+) as element(cts:options)
+{
+  if (fn:not(fn:exists($a)) or fn:not(fn:exists($b)))
+  then fn:exactly-one(($a, $b))
+  else
+    let $except-a := json:array()
+    return
+      element cts:options {
+        $a/(cts:format|cts:headers),
+
+        for $option in $b/cts:option[@type|@key]
+        let $original :=
+          fn:zero-or-one(
+            $a/cts:option[@type eq $option/@type or @key eq $option/@key])
+        return
+          if (fn:exists($original))
+          then ($original, json:array-push($except-a, $original))
+          else $option,
+
+        for $val in fn:distinct-values((
+          $a/cts:option except json:array-values($except-a),
+          $b/cts:option[fn:not(@type)][fn:not(@key)]
+        ))
+        return
+          element cts:option {
+            $a/cts:option[. eq $val]/@*,
+            $val
+          }
+      }
 };
 
 declare function cts:olap-def(
@@ -339,8 +423,7 @@ declare function cts:olap($olap as element(cts:olap), $options as element(cts:op
 declare function cts:olap($olap as element(cts:olap), $options as element(cts:options)?, $q as cts:query?)
 {
   let $query := cts:and-query(($q, $olap/cts:query/* ! cts:query(.)))
-  (: TODO: union :)
-  let $options := ($options, $olap/cts:options)[1]
+  let $options := cts:olap-merge-options($options, $olap/cts:options)
 
   (: TODO: cts:to-nested-array(), alternate format-fn ? :)
   let $format := $olap/cts:options/cts:format/fn:string()
