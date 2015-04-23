@@ -262,6 +262,7 @@ declare %private function cts:olap-complete($def as element(cts:olap))
       else cts:olap($def))
 };
 
+(: FIXME: not accurate for cross-product and cube strategies, where recursion is implicit instead of explicit :)
 declare %private function cts:olap-headers($def as element(cts:olap))
 {
   let $arr := json:array()
@@ -270,12 +271,12 @@ declare %private function cts:olap-headers($def as element(cts:olap))
     for $x in $type/*
     return
       json:array-push($arr,
-      if ($x/(self::cts:row|self::cts:column|self::cts:compute))
-      then $x/cts:alias/fn:string()
-      else
-        if ($x/self::cts:olap)
-        then cts:olap-headers($x)
-        else ()),
+        if ($x/(self::cts:row|self::cts:column|self::cts:compute))
+        then $x/cts:alias/fn:string()
+        else
+          if ($x/self::cts:olap)
+          then cts:olap-headers($x)
+          else ()),
     $arr
   )
 };
@@ -373,6 +374,8 @@ declare function cts:olap-merge-options(
       }
 };
 
+(: TODO: validate definition :)
+(: TODO: expand recursion strategies here, rather than during evalution :)
 declare function cts:olap-def(
   $type as xs:QName,
   $f as function(*)*,
@@ -401,18 +404,26 @@ declare function cts:olap-def(
 declare %private function cts:olap-output($format as xs:string) as item()
 {
   switch($format)
-    case "map" return map:map()
-    case "array" return json:array()
-    default return fn:error(xs:QName("UNKNOWN-FORMAT"), $format)
+  case "map" return map:map()
+  case "array" return json:array()
+  default return fn:error(xs:QName("UNKNOWN-FORMAT"), $format)
 };
 
 (: returns a consistent interface to `map:put` or `json:array-push()` :)
 declare %private function cts:olap-format($output) as function(*)
 {
   typeswitch($output)
-    case map:map return map:put($output, ?, ?)
-    case json:array return function($k, $v) { json:array-push($output, $v) }
-    default return fn:error(xs:QName("UNKNOWN-OUTPUT-TYPE"), xdmp:describe($output))
+  case map:map return map:put($output, ?, ?)
+  case json:array return function($k, $v) { json:array-push($output, $v) }
+  default return fn:error(xs:QName("UNKNOWN-OUTPUT-TYPE"), xdmp:describe($output))
+};
+
+declare %private function cts:olap-initial-members($def as element())
+{
+  typeswitch($def)
+  case element(cts:cross-product) return $def/cts:row
+  case element(cts:cube) return $def/cts:row[1]
+  default return $def/(cts:row,cts:column)
 };
 
 declare function cts:olap($olap as element(cts:olap))
@@ -422,19 +433,14 @@ declare function cts:olap($olap as element(cts:olap), $options as element(cts:op
 
 declare function cts:olap($olap as element(cts:olap), $options as element(cts:options)?, $q as cts:query?)
 {
-  let $query := cts:and-query(($q, $olap/cts:query/* ! cts:query(.)))
-  let $options := cts:olap-merge-options($options, $olap/cts:options)
-
-  (: TODO: cts:to-nested-array(), alternate format-fn ? :)
-  let $format := $olap/cts:options/cts:format/fn:string()
-
-  for $def in $olap/(cts:group-by|cts:cross-product|cts:cube)
-  let $members :=
-    typeswitch($def)
-      case element(cts:group-by) return $def/(cts:row,cts:column)
-      case element(cts:cube) return $def/cts:row[1]
-      default return $def/cts:row
-  return cts:olap-impl(fn:node-name($def), $members, $def/cts:compute, $options, $query)
+  let $def := fn:exactly-one($olap/(cts:group-by|cts:cross-product|cts:cube))
+  return
+    cts:olap-impl(
+      fn:node-name($def),
+      cts:olap-initial-members($def),
+      $def/cts:compute,
+      cts:olap-merge-options($options, $olap/cts:options),
+      cts:and-query(($q, $olap/cts:query/cts:*/cts:query(.))))
 };
 
 declare %private function cts:olap-impl(
@@ -444,55 +450,52 @@ declare %private function cts:olap-impl(
   $options as element(cts:options),
   $query as cts:query?
 ) {
-  let $format := $options/cts:format/fn:string()
-  (: TODO: $options/cts:option/fn:string() ?? :)
-  let $value-options := ($options/* except $options/(cts:format|cts:headers))/fn:string()
   let $refs := $members/cts:get-reference(.)
-
-  for $tuple in cts:value-tuples($refs, $value-options, $query)
+  for $tuple in cts:value-tuples($refs, $options/cts:option, $query)
   let $compute-query := cts:and-query(($query, cts:reference-queries($refs, $tuple)))
-  let $output := cts:olap-output($format)
+  let $output := cts:olap-output($options/cts:format)
 
   let $format-fn := cts:olap-format($output)
-  let $compute-fn :=
-    function() {
-      for $comp in $computes
-      return
-        if ($comp/cts:function eq "frequency")
-        then $format-fn($comp/cts:alias/fn:string(), cts:frequency($tuple))
-        else $format-fn($comp/cts:alias/fn:string(), cts:compute-aggregate($comp, $compute-query))
-    }
-  let $columns-fn :=
-    function() {
-      $format-fn(
-        "columns", (: TODO: alias? :)
-        cts:olap-impl(xs:QName("cts:group-by"), $members/../cts:column, $computes, $options, $compute-query))
-    }
+  let $compute-fn := function() {
+    $computes ! $format-fn(./cts:alias,
+      if (./cts:function eq "frequency")
+      then cts:frequency($tuple)
+      else cts:compute-aggregate(., $compute-query)
+    )
+  }
+  let $columns-fn := function() {
+    $format-fn("columns", (: TODO: alias? :)
+      cts:olap-impl(xs:QName("cts:group-by"), $members/../cts:column, $computes, $options, $compute-query))
+  }
 
   return (
+    (: append $tuple values to $output :)
     for $i in 1 to json:array-size($tuple)
-    return $format-fn($members[$i]/cts:alias/fn:string(), $tuple[$i])
-    ,
+    return $format-fn($members[$i]/cts:alias, $tuple[$i]),
+
+    (: compute and append aggregate computations, apply type-specific recursion strategies :)
     switch($type)
-      case xs:QName("cts:group-by") return (
-        $compute-fn(),
-        (: only group-by is recursive :)
-        $members/../cts:olap ! $format-fn("olap", cts:olap(., $options, $compute-query))
+    case xs:QName("cts:group-by") return (
+      $compute-fn(),
+      $members/parent::cts:group-by/cts:olap ! $format-fn("olap", (: TODO: alias? :)
+        cts:olap(., $options, $compute-query)
       )
-      case xs:QName("cts:cross-product") return
-        $columns-fn()
-      case xs:QName("cts:cube") return (
-        $compute-fn(),
-        $columns-fn(),
-        if (fn:exists($members/following-sibling::cts:row))
-        then
-          $format-fn(
-            "row-next", (: TODO: alias? :)
-            cts:olap-impl(xs:QName("cts:cube"), $members/following-sibling::cts:row[1], $computes, $options, $compute-query))
-        else ()
-      )
-      default return fn:error(xs:QName("UNKNOWN-OLAP-DEF"), $members/ancestor::*[fn:last()])
-    ,
+    )
+    case xs:QName("cts:cross-product") return
+      $columns-fn()
+    case xs:QName("cts:cube") return (
+      $compute-fn(),
+      $columns-fn(),
+      let $next := $members/following-sibling::cts:row[1]
+      return
+        if (fn:not(fn:exists($next))) then ()
+        else $format-fn($next/cts:alias || "-cube",
+          cts:olap-impl(xs:QName("cts:cube"), $next, $computes, $options, $compute-query)
+        )
+    )
+    default return fn:error(xs:QName("UNKNOWN-OLAP-DEF"), xdmp:describe($members/ancestor::*[fn:last()])),
+
+    (: return output :)
     $output
   )
 };
@@ -504,22 +507,23 @@ declare function cts:compute-aggregate($comp)
 declare function cts:compute-aggregate($comp as element(cts:compute), $compute-query as cts:query)
 {
   let $aggregate :=
-    if (fn:matches($comp/cts:function, "^native/(.*)/(.*)$"))
+    if (fn:matches($comp/cts:function, "^native/.*/.*$"))
     then cts:native-aggregate($comp/cts:function)
     else map:get($cts:AGGREGATES, $comp/cts:function)
   return
     if (fn:not(fn:exists($aggregate)))
-    then fn:error(xs:QName("UNKNOWN-COMPUTATION"), $comp)
-    else $aggregate( $comp/cts:get-reference(.), $comp/cts:options/cts:option/fn:string(), $compute-query )
+    then fn:error((), "UNKNOWN-COMPUTATION", xdmp:describe($comp))
+    else
+      $aggregate(
+        $comp/cts:get-reference(.),
+        $comp/cts:options/cts:option,
+        $compute-query)
 };
 
 declare %private function cts:native-aggregate($function as xs:string) as function(*)
 {
-  let $groups := fn:analyze-string($function, "^native/(.*)/(.*)$")//fn:group
-  let $plugin := "native/" || $groups[1]/fn:string()
-  let $name := $groups[2]/fn:string()
-  return
-    function($refs, $options, $query) {
-      cts:aggregate($plugin, $name, $refs, (), $options, $query)
-    }
+  let $groups := fn:analyze-string($function, "^(native/.*)/(.*)$")//fn:group
+  return function($refs, $options, $query) {
+    cts:aggregate($groups[1], $groups[2], $refs, (), $options, $query)
+  }
 };
