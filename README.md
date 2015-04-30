@@ -321,14 +321,25 @@ grpj:query($query)
 
 * $query as `map:map` or `json:object`
 
+- - -
+
+##### REST extension: `http://marklogic.com/rest-api/resource/group-by`
+
+MarkLogic REST API extension for JSON `cts:group-by` queries over any database
+
+##### POST `/v1/resources/group-by`
+
+evaluates a JSON-serialized `cts:group-by` query
+
+###### params
+
+* `rs:database` as `xs:string?`: optionally specify the name of a database to query
+
 ### License Information
 
 ###### group-by
 - Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
 - Copyright (c) 2014 Gary Vidal. All Rights Reserved.
-
-###### group-by-json
-- Copyright (c) 2014 Joseph Bryan. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
