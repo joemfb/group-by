@@ -7,12 +7,11 @@ xquery version "1.0-ml";
  :
  : @author Gary Vidal
  : @author Joe Bryan
- : @version 0.9
  :)
 module namespace ext = "http://marklogic.com/cts";
 
 import module namespace ctx = "http://marklogic.com/cts-extensions"
-  at "/mlpm_modules/cts-extensions/cts-extensions.xqy";
+  at "/ext/mlpm_modules/cts-extensions/cts-extensions.xqy";
 
 declare option xdmp:mapping "false";
 

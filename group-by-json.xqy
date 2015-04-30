@@ -9,7 +9,7 @@ module namespace grpj = "http://marklogic.com/cts/group-by/json";
 
 import module namespace cts = "http://marklogic.com/cts" at "./group-by.xqy";
 import module namespace ctx = "http://marklogic.com/cts-extensions"
-  at "/mlpm_modules/cts-extensions/cts-extensions.xqy";
+  at "/ext/mlpm_modules/cts-extensions/cts-extensions.xqy";
 
 declare option xdmp:mapping "false";
 
