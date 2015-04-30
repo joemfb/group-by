@@ -4,7 +4,6 @@ xquery version "1.0-ml";
  : evaluate map / JSON serialized cts:group-by query definitions
  :
  : @author Joe Bryan
- : @version 0.1
  :)
 module namespace grpj = "http://marklogic.com/cts/group-by/json";
 
@@ -27,26 +26,33 @@ declare %private function grpj:get-values($map, $key)
 (:~
  : construct cts:row, cts:column, and cts:compute objects from map / JSON objects
  :
- : @param $map as `map:map` or `json:object`
+ : @param $query as `map:map` or `json:object`
  :)
 declare %private function grpj:query-parser(
   $query,
-  $name as xs:string,
-  $fn as function(*)
+  $fn-name as xs:QName
 ) as function(*)*
 {
+  (: rows, columns, or computes :)
+  let $name := fn:local-name-from-QName($fn-name) || "s"
   for $entry in grpj:get-values($query, $name)
-  let $ref := (map:get($entry, "ref"), $entry)[1]
-  let $alias := (map:get($entry, "alias"), map:get($ref, "localname"), map:get($ref, "path-expression"))[1]
-  return
-    if ($name eq "computes" and fn:function-arity($fn) eq 3)
-    then
-      let $aggregate-fn := map:get($entry, "fn")
-      let $alias := (map:get($entry, "alias"), $alias || "-" || $aggregate-fn)[1]
-      return
-        $fn( $alias, $aggregate-fn, ctx:reference-from-map($ref) )
+  let $ref := ctx:reference-from-map( (map:get($entry, "ref"), $entry)[1] )
+  let $alias := map:get($entry, "alias")
+  let $aggregate-fn := map:get($entry, "fn")
+  let $is-compute := $fn-name eq xs:QName("cts:compute")
+  let $arity :=
+    if (fn:exists($alias) and $is-compute)
+    then 3
     else
-      $fn( $alias, ctx:reference-from-map($ref) )
+      if (fn:exists($alias) != $is-compute) (: xor :)
+      then 2
+      else 1
+  let $fn := fn:function-lookup($fn-name, $arity)
+  return
+    switch($arity)
+    case 3 return $fn($alias, $aggregate-fn, $ref)
+    case 2 return $fn( if ($is-compute) then $aggregate-fn else $alias, $ref )
+    default return $fn($ref)
 };
 
 (:~
@@ -56,9 +62,9 @@ declare %private function grpj:query-parser(
  :)
 declare function grpj:query($query)
 {
-  let $rows := grpj:query-parser($query, "rows", cts:row(?, ?))
-  let $columns := grpj:query-parser($query, "columns", cts:column(?, ?))
-  let $computes := grpj:query-parser($query, "computes", cts:compute(?, ?, ?))
+  let $rows := grpj:query-parser($query, xs:QName("cts:row"))
+  let $columns := grpj:query-parser($query, xs:QName("cts:column"))
+  let $computes := grpj:query-parser($query, xs:QName("cts:compute"))
   let $options := grpj:get-values($query, "options")
   let $result-type := (map:get($query, "result-type"), "group-by")[1]
   let $fn :=
