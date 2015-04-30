@@ -1,9 +1,9 @@
 {
   "name": "group-by",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "an XQuery library for computing aggregates over tuples in MarkLogic Server",
   "repository": "https://github.com/joemfb/group-by.git",
   "dependencies": {
-    "cts-extensions": "1.0.1"
+    "cts-extensions": "1.1.*"
   }
 }
