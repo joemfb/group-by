@@ -67,7 +67,7 @@ declare %private function cts:assert-count($items, $count, $msg)
  :
  : @param $ref as `cts:reference*` or `element(cts:*-reference)*`
  :)
-declare %private function cts:reference-queries($refs, $values as xs:anyAtomicType*) as cts:query+
+declare %private function cts:reference-queries($refs, $values as xs:anyAtomicType*) as cts:query*
 {
   let $size :=
     if ($values instance of json:array)
@@ -444,20 +444,36 @@ declare function cts:olap($olap as element(cts:olap), $options as element(cts:op
 
 declare %private function cts:olap-impl(
   $type as xs:QName,
-  $members as element()+,
+  $members as element()*,
   $computes as element()*,
   $options as element(cts:options),
   $query as cts:query?
 ) {
-  let $refs := $members/cts:get-reference(.)
-  for $tuple in cts:value-tuples($refs, $options/cts:option, $query)
+  if (fn:exists($members))
+  then
+    let $refs := $members/cts:get-reference(.)
+    return
+      for $tuple in cts:value-tuples($refs, $options/cts:option, $query)
+      return cts:olap-produce-output($type, $members, $computes, $options, $query, $refs, $tuple)
+  else cts:olap-produce-output($type, $members, $computes, $options, $query, (), ())
+};
+
+declare %private function cts:olap-produce-output(
+  $type as xs:QName,
+  $members as element()*,
+  $computes as element()*,
+  $options as element(cts:options),
+  $query as cts:query?,
+  $refs as cts:reference*,
+  $tuple as json:array*
+) {
   let $compute-query := cts:and-query(($query, cts:reference-queries($refs, $tuple)))
   let $output := cts:olap-output($options/cts:format)
 
   let $format-fn := cts:olap-format($output)
   let $compute-fn := function() {
     $computes ! $format-fn(./cts:alias,
-      if (./cts:function eq "frequency")
+      if (./cts:function eq "frequency" and fn:exists($tuple))
       then cts:frequency($tuple)
       else cts:compute-aggregate(., $compute-query)
     )
